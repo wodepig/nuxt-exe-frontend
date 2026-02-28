@@ -2,6 +2,8 @@
 
 > 参考项目: https://github.com/paulbrickwell/wails-nuxt-template
 
+[English Documentation](./README_EN.md)
+
 ![首页](./pngs/home.png)
 ## 一、项目背景（Background）
 
@@ -60,6 +62,7 @@ pnpm dev
 打包完成后，exe 文件位于 `build/bin` 目录。
 
 ## 六、结合 UpgradeLink 分发
+![autoupload](./pngs/auto-push.png)
 
 将打包后的 exe 文件上传至 [UpgradeLink](https://www.toolsetlink.com/) 开源项目，通过该项目提供的下载链接，即可便捷分发给客户使用。
 
