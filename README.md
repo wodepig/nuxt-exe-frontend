@@ -61,9 +61,29 @@ pnpm dev
 
 ## 六、结合 UpgradeLink 分发
 
-将打包后的 exe 文件上传至 [UpgradeLink](https://www.toolsetlink.com/) 开源项目，通过该项目提供的下载链接，即可便捷分发给客户使用（无自动更新机制，需手动更新下载）。
+将打包后的 exe 文件上传至 [UpgradeLink](https://www.toolsetlink.com/) 开源项目，通过该项目提供的下载链接，即可便捷分发给客户使用。
 
-action中已经配置了自动上传文件到UpgradeLink，无需手动操作。 [自动上传文件](https://github.com/wodepig/upgradelink-upload-xxdl)
+### 自动上传配置
+
+项目已集成 GitHub Action 自动上传功能，配置路径：`Settings -> Secrets and variables -> Actions -> Repository xxx`
+
+**Secrets（加密）:**
+| 名称 | 说明 |
+|------|------|
+| `UPGRADELINK_KEY` | type 对应的唯一 key |
+| `UPGRADELINK_PWD` | 密码 |
+
+**Variables（明文）:**
+| 名称 | 说明 |
+|------|------|
+| `SC_KEY` | server 酱发送通知 key |
+| `UPGRADELINK_TYPE` | 类型，如 file/url/tauri |
+| `UPGRADELINK_USERNAME` | UpgradeLink 用户名 |
+| `YUNMA_TOKEN` | 云码 token，用来自动登录 |
+
+详细配置参考：[自动上传文件](https://github.com/wodepig/upgradelink-upload-xxdl)
+
+
 
 ## 七、项目结构（Project Structure）
 
