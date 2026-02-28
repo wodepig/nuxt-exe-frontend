@@ -1,0 +1,174 @@
+name: Build Wails Application
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build:
+    runs-on: windows-latest
+    outputs:
+      start_time: ${{ steps.record_time.outputs.time }}
+      build_status: ${{ job.status }}
+
+    steps:
+    - name: Record start time
+      id: record_time
+      run: echo "time=$(Get-Date -UFormat %s)" >> $env:GITHUB_OUTPUT
+
+    - name: Start Notify
+      run: |
+        if ("${{ vars.SC_KEY }}" -ne "") {
+          $title = "🟡${{ github.event.repository.name }} Build Started"
+          $desp = "Build has started for branch: ${{ github.ref_name }}"
+          Invoke-RestMethod "https://sctapi.ftqq.com/${{ vars.SC_KEY }}.send?title=$($title -replace ' ', '%20')&desp=$($desp -replace ' ', '%20')"
+        } else {
+          Write-Host "SC_KEY not set, skipping notification"
+        }
+
+    - uses: actions/checkout@v4
+
+    - name: Set up Go
+      id: setup_go
+      uses: actions/setup-go@v5
+      with:
+        go-version: '1.22'
+
+    - name: Cache dependencies
+      id: cache_deps
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/go/pkg/mod
+          ~/go/bin/wails
+          node_modules
+          .nuxt
+        key: ${{ runner.os }}-deps-${{ hashFiles('**/go.sum', '**/package-lock.json', '**/pnpm-lock.yaml', '**/yarn.lock') }}
+        restore-keys: |
+          ${{ runner.os }}-deps-
+
+    - name: Install Wails and check dependencies
+      id: install_wails
+      run: |
+        # Install Wails if not cached
+        if (-not (Test-Path "$HOME/go/bin/wails")) {
+          Write-Host "Installing Wails CLI..."
+          go install github.com/wailsapp/wails/v2/cmd/wails@latest
+        } else {
+          Write-Host "Wails already installed from cache"
+        }
+        
+        # Check versions
+        Write-Host "=== Dependency Versions ==="
+        go version
+        node --version
+        npm --version
+        wails version
+
+    - name: Build application
+      id: build_app
+      run: |
+        Write-Host "Starting Wails build..."
+        wails build
+        Write-Host "Build completed successfully!"
+
+    - name: Upload build artifact
+      id: upload_artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: wails-build
+        path: build/bin
+        retention-days: 7
+
+    - name: Push To UpgradeLink
+      if: ${{ vars.UPGRADELINK_USERNAME != '' }}
+      id: push-upgradelink
+      uses: wodepig/upgradelink-upload-xxdl@latest
+      with:
+        upgradelink_username: ${{ vars.UPGRADELINK_USERNAME }}
+        upgradelink_pwd: ${{ secrets.UPGRADELINK_PWD }}
+        upgradelink_type: ${{ vars.UPGRADELINK_TYPE }}
+        upgradelink_key: ${{ secrets.UPGRADELINK_KEY }}
+        prompt_upgrade_content: ${{ github.event.head_commit.message }}
+        dist_url: build/bin
+        yunma_token: ${{ vars.YUNMA_TOKEN }}
+        auto_push: true
+
+    - name: Check UpgradeLink status
+      if: ${{ vars.UPGRADELINK_USERNAME == '' }}
+      run: |
+        Write-Host "UPGRADELINK_USERNAME not set, skipping Push To UpgradeLink"
+
+    - name: List build output
+      id: list_output
+      run: |
+        Write-Host "=== Build Output ==="
+        Get-ChildItem -Path build/bin -Recurse | Format-Table -AutoSize
+
+  send-notification:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code for commit info
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Calculate build time
+        id: time_calc
+        run: |
+          start_time=${{ needs.build.outputs.start_time }}
+          end_time=$(date +%s)
+          duration=$((end_time - start_time))
+          mins=$((duration / 60))
+          secs=$((duration % 60))
+          echo "duration=${mins}分${secs}秒" >> $GITHUB_OUTPUT
+          echo "current_time=$(TZ='Asia/Shanghai' date +'%Y-%m-%d %H:%M:%S')" >> $GITHUB_OUTPUT
+
+      - name: Determine status
+        id: status_check
+        run: |
+          if [[ "${{ needs.build.outputs.build_status }}" == "success" ]]; then
+            echo "status=成功" >> $GITHUB_OUTPUT
+            echo "status_emoji=🟢" >> $GITHUB_OUTPUT
+          else
+            echo "status=失败" >> $GITHUB_OUTPUT
+            echo "status_emoji=🔴" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Get commit info
+        id: commit_info
+        run: |
+          commit_msg=$(git log -1 --pretty=format:"%s")
+          commit_hash=$(git rev-parse --short HEAD)
+          echo "commit_msg=${commit_msg}" >> $GITHUB_OUTPUT
+          echo "commit_hash=${commit_hash}" >> $GITHUB_OUTPUT
+
+      - name: Send notification
+        run: |
+          if [ -n "${{ vars.SC_KEY }}" ]; then
+            title="${{ steps.status_check.outputs.status_emoji }}${{ github.event.repository.name }} Build ${{ steps.status_check.outputs.status }}"
+            desp="构建状态：${{ steps.status_check.outputs.status }}
+            构建耗时：${{ steps.time_calc.outputs.duration }}
+            提交信息：${{ steps.commit_info.outputs.commit_msg }}
+            完成时间：${{ steps.time_calc.outputs.current_time }}
+
+            步骤执行状态：
+            - 安装 Wails：${{ needs.build.result }}
+            - 构建应用：${{ needs.build.result }}
+            - 上传产物：${{ needs.build.result }}
+            - Push To UpgradeLink：${{ vars.UPGRADELINK_USERNAME != '' && needs.build.result || 'Skipped' }}
+            - 列出输出：${{ needs.build.result }}"
+                      curl -s "https://sctapi.ftqq.com/${{ vars.SC_KEY }}.send" \
+                        -d "title=${title}" \
+                        -d "desp=${desp}"
+          else
+            echo "SC_KEY not set, skipping notification"
+            echo "Build status: ${{ steps.status_check.outputs.status }}"
+            echo "Build duration: ${{ steps.time_calc.outputs.duration }}"
+            echo "Commit message: ${{ steps.commit_info.outputs.commit_msg }}"
+            echo "Push To UpgradeLink: ${{ vars.UPGRADELINK_USERNAME != '' && needs.build.result || 'Skipped' }}"
+          fi
+
