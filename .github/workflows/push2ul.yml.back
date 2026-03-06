@@ -2,13 +2,13 @@ name: Build Wails Application
 
 on:
   push:
-    tags: [ 'v*' ]
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
 
 jobs:
   build:
     runs-on: windows-latest
-    permissions:
-      contents: write
     outputs:
       start_time: ${{ steps.record_time.outputs.time }}
       build_status: ${{ job.status }}
@@ -73,16 +73,6 @@ jobs:
         Write-Host "Starting Wails build..."
         wails build
         Write-Host "Build completed successfully!"
-        
-        # Rename output file
-        $tag = "${{ github.ref_name }}"
-        $exeName = "xxdl-watermark-$tag.exe"
-        if (Test-Path "build/bin/default.exe") {
-          Rename-Item "build/bin/default.exe" $exeName
-        } elseif (Test-Path "build/bin/nuxt-exe-frontend.exe") {
-          Rename-Item "build/bin/nuxt-exe-frontend.exe" $exeName
-        }
-        Write-Host "Renamed output to: $exeName"
 
     - name: Upload build artifact
       id: upload_artifact
@@ -92,12 +82,24 @@ jobs:
         path: build/bin
         retention-days: 7
 
-    - name: Upload to GitHub Release
-      if: startsWith(github.ref, 'refs/tags/')
-      uses: softprops/action-gh-release@v2
+    - name: Push To UpgradeLink
+      if: ${{ vars.UPGRADELINK_USERNAME != '' }}
+      id: push-upgradelink
+      uses: wodepig/upgradelink-upload-xxdl@latest
       with:
-        files: build/bin/*.exe
-        generate_release_notes: true
+        upgradelink_username: ${{ vars.UPGRADELINK_USERNAME }}
+        upgradelink_pwd: ${{ secrets.UPGRADELINK_PWD }}
+        upgradelink_type: ${{ vars.UPGRADELINK_TYPE }}
+        upgradelink_key: ${{ secrets.UPGRADELINK_KEY }}
+        prompt_upgrade_content: ${{ github.event.head_commit.message }}
+        dist_url: build/bin
+        yunma_token: ${{ vars.YUNMA_TOKEN }}
+        auto_push: true
+
+    - name: Check UpgradeLink status
+      if: ${{ vars.UPGRADELINK_USERNAME == '' }}
+      run: |
+        Write-Host "UPGRADELINK_USERNAME not set, skipping Push To UpgradeLink"
 
     - name: List build output
       id: list_output
@@ -157,7 +159,7 @@ jobs:
             - 安装 Wails：${{ needs.build.result }}
             - 构建应用：${{ needs.build.result }}
             - 上传产物：${{ needs.build.result }}
-            - 上传到 GitHub Release：${{ startsWith(github.ref, 'refs/tags/') && needs.build.result || 'Skipped' }}
+            - Push To UpgradeLink：${{ vars.UPGRADELINK_USERNAME != '' && needs.build.result || 'Skipped' }}
             - 列出输出：${{ needs.build.result }}"
                       curl -s "https://sctapi.ftqq.com/${{ vars.SC_KEY }}.send" \
                         -d "title=${title}" \
@@ -167,6 +169,6 @@ jobs:
             echo "Build status: ${{ steps.status_check.outputs.status }}"
             echo "Build duration: ${{ steps.time_calc.outputs.duration }}"
             echo "Commit message: ${{ steps.commit_info.outputs.commit_msg }}"
-            echo "Push To GitHub Release: ${{ startsWith(github.ref, 'refs/tags/') && needs.build.result || 'Skipped' }}"
+            echo "Push To UpgradeLink: ${{ vars.UPGRADELINK_USERNAME != '' && needs.build.result || 'Skipped' }}"
           fi
 

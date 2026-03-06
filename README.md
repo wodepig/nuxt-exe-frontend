@@ -61,12 +61,14 @@ pnpm dev
 
 打包完成后，exe 文件位于 `build/bin` 目录。
 
+创建v1.0.0标记并推送, 可以自动上传文件到github release。
 ## 六、结合 UpgradeLink 分发
 ![autoupload](./pngs/auto-push.png)
 
 将打包后的 exe 文件上传至 [UpgradeLink](https://www.toolsetlink.com/) 开源项目，通过该项目提供的下载链接，即可便捷分发给客户使用。
 
 ### 自动上传配置
+>push2ul.yml.back文件
 
 项目已集成 GitHub Action 自动上传功能，配置路径：`Settings -> Secrets and variables -> Actions -> Repository xxx`
 

@@ -4,6 +4,9 @@ export default defineNuxtConfig({
   devtools: { enabled: true },
   ssr: false,
   modules: ['@nuxt/ui'],
+  ui:{
+    fonts: false
+  },
   css: ['~/assets/css/main.css'],
   nitro: {
     prerender: {
